@@ -89,6 +89,60 @@ class PagamentoCredito(EstrategiaPagamento):
             return False
 
 # ==========================================================
+# Subsistemas
+# ==========================================================
+class SistemaEstoque:
+    def atualizar_estoque(self, itens):
+        print("Atualizando estoque com os itens do pedido...")
+        for item in itens:
+            print(f"   -> Removendo {item['nome']} do estoque.")
+
+class GeradorNotaFiscal:
+    def gerar_nota_fiscal(self, pedido):
+        print("Gerando nota fiscal para o pedido...")
+        print(f"   -> Itens: {[item['nome'] for item in pedido.itens]}")
+        print("   -> Nota fiscal gerada com sucesso.")
+
+# ==========================================================
+# Classe CheckoutFacade
+# ==========================================================
+class CheckoutFacade:
+    def __init__(self, sistema_estoque, gerador_nota_fiscal):
+        self.sistema_estoque = sistema_estoque
+        self.gerador_nota_fiscal = gerador_nota_fiscal
+
+    def concluir_transacao(self, pedido):
+        print("=========================================")
+        print("INICIANDO CHECKOUT COM PADRÃO FACADE...")
+
+        # 1. Calcular o custo base com os decorators
+        pedido_base = PedidoBase(pedido.itens)
+        for decorator in pedido.decorators:
+            pedido_base = decorator(pedido_base)
+
+        valor_com_desconto = pedido_base.calcular_custo()
+
+        # 2. Calcular Frete
+        custo_frete = pedido.estrategia_frete.calcular_frete(valor_com_desconto)
+        valor_final = valor_com_desconto + custo_frete
+
+        print(f"\nValor a Pagar: R${valor_final:.2f}")
+
+        # 3. Processar Pagamento
+        if pedido.estrategia_pagamento.processar_pagamento(valor_final):
+            # 4. Atualizar Estoque
+            self.sistema_estoque.atualizar_estoque(pedido.itens)
+
+            # 5. Gerar Nota Fiscal
+            self.gerador_nota_fiscal.gerar_nota_fiscal(pedido)
+
+            print("\nSUCESSO: Pedido finalizado e registrado no sistema.")
+            return True
+        else:
+            print("\nFALHA: Transação abortada.")
+            return False
+
+# ==========================================================
 # Classe Pedido (Contexto)
 # ==========================================================
 class Pedido:
@@ -98,43 +152,24 @@ class Pedido:
         self.estrategia_frete = estrategia_frete
         self.decorators = decorators
 
-    def finalizar_compra(self):
-        print("=========================================")
-        print("INICIANDO CHECKOUT COM PADRÃO DECORATOR...")
-
-        # 1. Calcular o custo base com os decorators
-        pedido = PedidoBase(self.itens)
-        for decorator in self.decorators:
-            pedido = decorator(pedido)
-
-        valor_com_desconto = pedido.calcular_custo()
-
-        # 2. Calcular Frete
-        custo_frete = self.estrategia_frete.calcular_frete(valor_com_desconto)
-        valor_final = valor_com_desconto + custo_frete
-
-        print(f"\nValor a Pagar: R${valor_final:.2f}")
-
-        # 3. Processar Pagamento
-        if self.estrategia_pagamento.processar_pagamento(valor_final):
-            print("\nSUCESSO: Pedido finalizado e registrado no estoque.")
-            print("Emitindo nota fiscal (lógica de subsistema oculta).")
-            return True
-        else:
-            print("\nFALHA: Transação abortada.")
-            return False
-
 # ==========================================================
 # USO ATUAL (CENÁRIOS DE TESTE)
 # ==========================================================
 if __name__ == "__main__":
+    # Instanciar subsistemas
+    sistema_estoque = SistemaEstoque()
+    gerador_nota_fiscal = GeradorNotaFiscal()
+
+    # Instanciar a fachada
+    checkout_facade = CheckoutFacade(sistema_estoque, gerador_nota_fiscal)
+
     # Cenário 1: Pedido com PIX (Desconto) e Frete Normal.
     itens_p1 = [
         {'nome': 'Capa da Invisibilidade', 'valor': 150.0},
         {'nome': 'Poção de Voo', 'valor': 80.0}
     ]
     pedido1 = Pedido(itens_p1, PagamentoPix(), FreteNormal(), decorators=[DescontoPix])
-    pedido1.finalizar_compra()
+    checkout_facade.concluir_transacao(pedido1)
 
     print("\n--- Próximo Pedido ---")
 
@@ -143,4 +178,4 @@ if __name__ == "__main__":
         {'nome': 'Cristal Mágico', 'valor': 600.0}
     ]
     pedido2 = Pedido(itens_p2, PagamentoCredito(), FreteExpresso(), decorators=[TaxaEmbalagemPresente])
-    pedido2.finalizar_compra()
+    checkout_facade.concluir_transacao(pedido2)
